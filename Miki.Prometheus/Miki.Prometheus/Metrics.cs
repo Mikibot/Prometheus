@@ -9,9 +9,9 @@ namespace Miki.Data.Prometheus
     public class Timer : IDisposable
     {
         private Stopwatch _stopwatch;
-        private Gauge _gauge;
+        private IGauge _gauge;
 
-        internal Timer(Gauge g)
+        internal Timer(IGauge g)
         {
             _stopwatch = Stopwatch.StartNew();
             _gauge = g;
@@ -34,6 +34,17 @@ namespace Miki.Data.Prometheus
                 bool useHttps = false)
             {
                 var metricServer = new MetricServer(port, url, registry, useHttps);
+                metricServer.Start();
+                return metricServer;
+            }
+            public static IMetricServer AsServer(
+                string hostname,
+                int port,
+                string url = "metrics/",
+                global::Prometheus.Advanced.ICollectorRegistry registry = null,
+                bool useHttps = false)
+            {
+                var metricServer = new MetricServer(hostname, port, url, registry, useHttps);
                 metricServer.Start();
                 return metricServer;
             }
@@ -80,12 +91,16 @@ namespace Miki.Data.Prometheus
                 SuppressInitialValue = true
             });
 
+
             if (labels != null)
             {
-                counter.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                var child = counter.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                child.Inc(increment);
             }
-
-            counter.Inc(increment);
+            else
+            {
+                counter.Inc(increment);
+            }
         }
 
         /// <summary>
@@ -113,16 +128,12 @@ namespace Miki.Data.Prometheus
 
             if (labels != null)
             {
-                gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
-            }
-
-            if (valueDelta > 0)
-            {
-                gauge.Inc(valueDelta);
+                var child = gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                child.Inc(valueDelta);
             }
             else
             {
-                gauge.Dec(Math.Abs(valueDelta));
+                gauge.Inc(valueDelta);
             }
         }
 
@@ -151,10 +162,13 @@ namespace Miki.Data.Prometheus
 
             if (labels != null)
             {
-                gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                var child = gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                child.Set(value);
             }
-
-            gauge.Set(value);
+            else
+            {
+                gauge.Set(value);
+            }
         }
 
         /// <summary>
@@ -184,10 +198,13 @@ namespace Miki.Data.Prometheus
 
             if (labels != null)
             {
-                histogram.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                var child = histogram.Labels(labels.Select(x => x.Value.ToString()).ToArray());
+                child.Observe(value);
             }
-
-            histogram.Observe(value);
+            else
+            {
+                histogram.Observe(value);
+            }
         }
 
         /// <summary>
@@ -213,10 +230,13 @@ namespace Miki.Data.Prometheus
 
             if (labels != null)
             {
-                gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                var child = gauge.WithLabels(labels.Select(x => x.Value.ToString()).ToArray());
+                return new Timer(child);
             }
-
-            return new Timer(gauge);
+            else
+            {
+                return new Timer(gauge);
+            }
         }
     }
 }
